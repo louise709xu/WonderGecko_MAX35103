@@ -289,6 +289,44 @@ void SPI_init()
 
 }
 
+/******************************************************************************
+ * @brief Set up UART
+ * @detail:
+ *
+ * @return void
+ * Note:
+*******************************************************************************/
+void UART_init() {
+
+  CMU_ClockEnable(cmuClock_HFPER, true);
+  CMU_ClockEnable(cmuClock_USART0, true); // Enable clock for USART0 module
+  CMU_ClockEnable(cmuClock_GPIO, true);
+
+  GPIO_PinModeSet(gpioPortC, 0, gpioModePushPull, 1); // TX
+  GPIO_PinModeSet(gpioPortC, 1, gpioModeInput, 0); // RX
+
+  USART_InitAsync_TypeDef usartInitUSART0 = {
+    .enable = usartDisable, 					// Initially disabled
+    .refFreq = 0,								// configured reference frequency
+    .baudrate = 115200, 				        // Baud rate defined in common.h
+    .oversampling = usartOVS16, 				// overSampling rate x16
+    .databits = USART_FRAME_DATABITS_EIGHT, 	// 8-bit frames
+    .parity = USART_FRAME_PARITY_NONE,			// parity - none
+    .stopbits = USART_FRAME_STOPBITS_ONE,		// 1 stop bit
+  };
+
+  /*Initialize UART registers*/
+  USART_InitAsync(USART0, &usartInitUSART0);
+
+  USART0 -> ROUTE = USART_ROUTE_RXPEN | USART_ROUTE_TXPEN | USART_ROUTE_LOCATION_LOC5;
+
+  /* Inform NVIC of IRQ changes*/
+  NVIC_ClearPendingIRQ(USART0_TX_IRQn);
+  NVIC_EnableIRQ(USART0_TX_IRQn);
+
+  USART_Enable(USART0, usartEnable);
+  NVIC_SetPriority(USART0_TX_IRQn, 1);
+}
 
 /*******************************************************************************
  * @brief :
@@ -342,6 +380,7 @@ int main(void)
     CHIP_Init();
 
     SPI_init();
+    UART_init();
     MAX_init();  // Initialize MAX settings through SPI
 
     setupGPIOInt();
@@ -353,6 +392,12 @@ int main(void)
 
     ASSERT_MAX_TDC_CE;
     spi_return[0] = MAX_SPI_CMD(TOF_DIFF);          // TOF Diff
+    DEASSERT_MAX_TDC_CE;
+
+    ASSERT_MAX_TDC_CE;
+    spi_return[0] = MAX_SPI_CMD(READ_INT_STAT_REG);     // Read status register
+    spi_return[1] = MAX_SPI_CMD(NULL_CMD);
+    spi_return[2] = MAX_SPI_CMD(NULL_CMD);
     DEASSERT_MAX_TDC_CE;
 
     while (1) {
@@ -377,6 +422,8 @@ int main(void)
         	spi_return[5] = MAX_SPI_CMD(NULL_CMD);
         	spi_return[6] = MAX_SPI_CMD(NULL_CMD);
         	DEASSERT_MAX_TDC_CE;
+
+        	USART_Tx(USART0, 0x46);
 
         	spi_return[1] = 0x00;
             GPIO_IntEnable(0x0010);
