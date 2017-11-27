@@ -4,15 +4,36 @@
 #include "em_cmu.h"
 #include "em_gpio.h"
 #include "em_usart.h"
+#include "spidrv.h"
+#include "uartdrv.h"
+#include "string.h"
 
+#define SPI_TX_CONFIG_BUF_LENGTH 3
+#define SPI_TX_BUF_LENGTH 1
+#define SPI_RX_BUF_LENGTH 10
+
+SPIDRV_HandleData_t spi_handleData;
+SPIDRV_Handle_t spi_handle = &spi_handleData;
+
+uint8_t spi_tx_config_buffer[SPI_TX_CONFIG_BUF_LENGTH];
+uint8_t spi_tx_buffer[SPI_TX_BUF_LENGTH];
+uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH]; // spi_return[0] reserved for meaningless values (values returned by MAX during opcode commands or writing to registers)
+                                           // spi_return[1:2] Interrupt Status Register
+                                           // spi_return[3:4] TOF Int
+                                           // spi_return[5:6] TOF Frac
+                                           // spi_return[7:8] RTC Seconds
 
 /* ----- Begin Macros ----- */
-// SPI Transfer
-#define MAX_SPI_CMD(x)          USART_SpiTransfer(USART1, x)
+// MAX SPI Transfer
+#define MAX_SPI_TX_Config(x)    SPIDRV_MTransmitB(spi_handle, x, 3);
+#define MAX_SPI_TX(x)           SPIDRV_MTransmitB(spi_handle, x, 1);
+#define MAX_SPI_RX(x)           SPIDRV_MReceiveB(spi_handle, x, 1);
+#define MAX_SPI_TXRX(x,y)       SPIDRV_MTransferB(spi_handle, x, y, 3);
 
 // MAX Clock Enable (CE_)
-#define ASSERT_MAX_TDC_CE       GPIO_PinModeSet(gpioPortD, 3, gpioModePushPull, 0)
-#define DEASSERT_MAX_TDC_CE     GPIO_PinModeSet(gpioPortD, 3, gpioModePushPull, 1)
+// Not necessary for SPIDRV
+// #define ASSERT_MAX_TDC_CE       GPIO_PinModeSet(gpioPortD, 3, gpioModePushPull, 0)
+// #define DEASSERT_MAX_TDC_CE     GPIO_PinModeSet(gpioPortD, 3, gpioModePushPull, 1)
 
 // Null
 #define NULL_CMD                0xA0
@@ -148,15 +169,10 @@
 
 /* ----- End Macros ----- */
 
-uint8_t spi_return[20];  // spi_return[0] reserved for meaningless values (values returned by MAX during opcode commands or writing to registers)
-                         // spi_return[1:2] Interrupt Status Register
-                         // spi_return[3:4] TOF Int
-                         // spi_return[5:6] TOF Frac
-                         // spi_return[7:8] RTC Seconds
 
 /******************************************************************************
  * @brief Initialize MAX35103 settings
- * @detail: Set up TOF1/2/3/4/5 registers through SPI
+ * @detail: Set up TOF1/2/3/4/5/6/7 registers and initialize MAX board
  *
  * @return void
  * Note:
@@ -166,128 +182,108 @@ void MAX_init()
 {
     /* ----- Begin configuration register setup ----- */
 
-	ASSERT_MAX_TDC_CE;
-	    // TOF1 Register - basic operating parameters for TOF measurements
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF1);    // Write to TOF1
-	    spi_return[0] = MAX_SPI_CMD(0x0C);          // TOF1[15:8]   Pulse Launcher Size
-	    spi_return[0] = MAX_SPI_CMD(0x10);          // TOF1[7:4]    Pulse Launch Divider
-	                                                // TOF1.3       Stop Polarity
-	                                                // TOF1.2       Reserved (No effect)
-	                                                // TOF1[1:0]    Bias Charge Time
-	    DEASSERT_MAX_TDC_CE;
+	/**
+	 * TOF1 Register - basic operating parameters for TOF measurements
+	 *   TOF1[15:8]   Pulse Launcher Size
+	 *   TOF1[7:4]    Pulse Launch Divider
+	 *   TOF1.3       Stop Polarity
+	 *   TOF1.2       Reserved (No effect)
+	 *   TOF1[1:0]    Bias Charge Time
+	 */
+	spi_tx_config_buffer[0] = WRITE_TOF1;
+	spi_tx_config_buffer[1] = 0x0C;
+	spi_tx_config_buffer[2] = 0x10;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Write to TOF1
 
-	    ASSERT_MAX_TDC_CE;
-	    // TOF2 Register - details of how TOF will be measured
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF2);    // Write to TOF2
-	    spi_return[0] = MAX_SPI_CMD(0xE1);          // TOF2[15:13]  Stop Hits
-	                                                // TOF2[12:7]   T2 Wave Selection
-	    spi_return[0] = MAX_SPI_CMD(0x00);          // TOF2[12:7]   T2 Wave Selection
-	                                                // TOF2[6:4]    TOF Duty Cycle
-	                                                // TOF2.3       Reserved (No effect)
-	                                                // TOF2[2:0]    Timeout
-	    DEASSERT_MAX_TDC_CE;
+    /**
+     * TOF2 Register - details of how TOF will be measured
+     * TOF2[15:13]  Stop Hits
+     * TOF2[12:7]   T2 Wave Selection
+     * TOF2[6:4]    TOF Duty Cycle
+     * TOF2.3       Reserved (No effect)
+     * TOF2[2:0]    Timeout
+     */
+	spi_tx_config_buffer[0] = WRITE_TOF2;
+	spi_tx_config_buffer[1] = 0xE1;
+	spi_tx_config_buffer[2] = 0x00;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Write to TOF2
 
-	    ASSERT_MAX_TDC_CE;
-	    // TOF3 Register - select which waves will be used in time measurements
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF3);    // Write to TOF3
-	    spi_return[0] = MAX_SPI_CMD(0x05);          // TOF3[15:14]  Reserved
-	                                                // TOF3[13:8]   HIT1 Wave Select
-	    spi_return[0] = MAX_SPI_CMD(0x06);          // TOF3[7:6]    Reserved
-	                                                // TOF3[5:0]    HIT2 Wave Select
-	    DEASSERT_MAX_TDC_CE;
+	/**
+	 * TOF3 Register - select which waves will be used in time measurements
+	 * TOF3[15:14]  Reserved
+	 * TOF3[13:8]   HIT1 Wave Select
+	 * TOF3[7:6]    Reserved
+	 * TOF3[5:0]    HIT2 Wave Select
+	 */
+	spi_tx_config_buffer[0] = WRITE_TOF3;
+	spi_tx_config_buffer[1] = 0x05;
+	spi_tx_config_buffer[2] = 0x06;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Write to TOF3
 
-	    ASSERT_MAX_TDC_CE;
-	    // TOF4 Register - select which waves will be used in time measurements
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF4);    // Write to TOF4
-	    spi_return[0] = MAX_SPI_CMD(0x07);          // TOF4[15:14]  Reserved
-	                                                // TOF4[13:8]   HIT3 Wave Select
-	    spi_return[0] = MAX_SPI_CMD(0x08);          // TOF4[7:6]    Reserved
-	                                                // TOF4[5:0]    HIT4 Wave Select
-	    DEASSERT_MAX_TDC_CE;
+    /**
+     * TOF4 Register - select which waves will be used in time measurements
+     * TOF4[15:14]  Reserved
+     * TOF4[13:8]   HIT3 Wave Select
+     * TOF4[7:6]    Reserved
+     * TOF4[5:0]    HIT4 Wave Select
+     */
+	spi_tx_config_buffer[0] = WRITE_TOF4;
+	spi_tx_config_buffer[1] = 0x07;
+	spi_tx_config_buffer[2] = 0x08;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Write to TOF4
 
-	    ASSERT_MAX_TDC_CE;
-	    // TOF5 Register - select which waves will be used in time measurements
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF5);    // Write to TOF5
-	    spi_return[0] = MAX_SPI_CMD(0x09);          // TOF5[15:14]  Reserved
-	                                                // TOF5[13:8]   HIT5 Wave Select
-	    spi_return[0] = MAX_SPI_CMD(0x0A);          // TOF5[7:6]    Reserved
-	                                                // TOF5[5:0]    HIT6 Wave Select
-	    DEASSERT_MAX_TDC_CE;
+	/**
+	 * TOF5 Register - select which waves will be used in time measurements
+	 * TOF5[15:14]  Reserved
+	 * TOF5[13:8]   HIT5 Wave Select
+	 * TOF5[7:6]    Reserved
+	 * TOF5[5:0]    HIT6 Wave Select
+	 */
+	spi_tx_config_buffer[0] = WRITE_TOF5;
+	spi_tx_config_buffer[1] = 0x09;
+	spi_tx_config_buffer[2] = 0x0A;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Write to TOF5
 
-	    ASSERT_MAX_TDC_CE;
-	    // TOF6 Register - comparator upstream
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF6);    // Write to TOF6
-	    spi_return[0] = MAX_SPI_CMD(0x23);          // TOF6[15:8]   Comparator Return Offset Upstream
-	    spi_return[0] = MAX_SPI_CMD(0x0A);          // TOF6[7:0]    Comparator Offset Upstream
-	    DEASSERT_MAX_TDC_CE;
+	/**
+	 * TOF6 Register - comparator upstream
+	 * TOF6[15:8]   Comparator Return Offset Upstream
+	 * TOF6[7:0]    Comparator Offset Upstream
+	 */
+	spi_tx_config_buffer[0] = WRITE_TOF6;
+	spi_tx_config_buffer[1] = 0x23;
+	spi_tx_config_buffer[2] = 0x0A;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Write to TOF6
 
-	    ASSERT_MAX_TDC_CE;
-	    // TOF7 Register - comparator downstream
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF7);    // Write to TOF7
-	    spi_return[0] = MAX_SPI_CMD(0x23);          // TOF7[15:8]   Comparator Return Offset Downstream
-	    spi_return[0] = MAX_SPI_CMD(0x0A);          // TOF7[7:0]    Comparator Offset Downstream
-	    DEASSERT_MAX_TDC_CE;
+    /**
+     * TOF7 Register - comparator downstream
+     * TOF7[15:8]   Comparator Return Offset Downstream
+     * TOF7[7:0]    Comparator Offset Downstream
+     */
+	spi_tx_config_buffer[0] = WRITE_TOF7;
+	spi_tx_config_buffer[1] = 0x23;
+	spi_tx_config_buffer[2] = 0x0A;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Write to TOF7
 
-	    ASSERT_MAX_TDC_CE;
-	    spi_return[0] = MAX_SPI_CMD(WRITE_TOF_MEAS_DELAY);  // Set TOF Measurement Delay
-	    spi_return[0] = MAX_SPI_CMD(0x00);
-	    spi_return[0] = MAX_SPI_CMD(0xC8);
-	    DEASSERT_MAX_TDC_CE;
 
-	    ASSERT_MAX_TDC_CE;
-	    spi_return[0] = MAX_SPI_CMD(WRITE_CLBRT_CTRL);      // Set Calibration and Control Register
-	    spi_return[0] = MAX_SPI_CMD(0x0E);
-	    spi_return[0] = MAX_SPI_CMD(0xFF);
-	    DEASSERT_MAX_TDC_CE;
+	spi_tx_config_buffer[0] = WRITE_TOF_MEAS_DELAY;
+	spi_tx_config_buffer[1] = 0x00;
+	spi_tx_config_buffer[2] = 0xC8;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Set TOF Measurement Delay
 
-	    /* ----- End configuration register setup ----- */
+	spi_tx_config_buffer[0] = WRITE_CLBRT_CTRL;
+	spi_tx_config_buffer[1] = 0x0E;
+	spi_tx_config_buffer[2] = 0xFF;
+	MAX_SPI_TX_Config(&spi_tx_config_buffer[0]);    // Set Calibration and Control Register
 
-	    ASSERT_MAX_TDC_CE;
-	    spi_return[0] = MAX_SPI_CMD(TX_CONFIG_FLASH);       // Transfer Configuration to Flash Command
-	    DEASSERT_MAX_TDC_CE;
+	/* ----- End configuration register setup ----- */
 
-	    ASSERT_MAX_TDC_CE;
-	    spi_return[0] = MAX_SPI_CMD(INITIALIZE);            // Initialize
-	    DEASSERT_MAX_TDC_CE;
+	spi_tx_buffer[0] = TX_CONFIG_FLASH;       // Transfer Configuration to Flash Command
+    MAX_SPI_TX(&spi_tx_buffer[0]);
 
+    spi_tx_buffer[0] = INITIALIZE;            // Initialize
+    MAX_SPI_TX(&spi_tx_buffer[0]);
 }
 
-
-/******************************************************************************
- * @brief Initialize WonderGecko SPI
- * @detail: Enable high frequency RC oscillator, set baud rate/endian/clock mode
- *
- * @return void
- * Note:
-*******************************************************************************/
-
-void SPI_init()
-{
-    CMU_ClockSelectSet(cmuClock_HF, cmuSelect_HFRCO);
-
-    /* Enabling clock to USART1 */
-    CMU_ClockEnable(cmuClock_USART1, true);
-    CMU_ClockEnable(cmuClock_GPIO, true);
-
-    USART_InitSync_TypeDef init = USART_INITSYNC_DEFAULT;
-
-    /* Initialize USART in SPI master mode. */
-    init.baudrate  = 14000000;      // baudRate defined in common.h
-    init.msbf      = true;          // Analog devices is big endian
-    init.clockMode = usartClockMode1;
-    USART_InitSync(USART1, &init);
-
-    /* Enabling pins and setting location, SPI /CS bus controlled independently */
-    USART1->ROUTE = USART_ROUTE_TXPEN | USART_ROUTE_RXPEN |
-            USART_ROUTE_CLKPEN | USART_ROUTE_LOCATION_LOC1;
-
-    /* IO configuration */
-    GPIO_PinModeSet(gpioPortD, 0, gpioModePushPull, 0);	 /* MOSI */
-    GPIO_PinModeSet(gpioPortD, 1, gpioModeInput, 0);     /* MISO */
-    GPIO_PinModeSet(gpioPortD, 2, gpioModePushPull, 1);  /* CLK */
-    GPIO_PinModeSet(gpioPortD, 3, gpioModePushPull, 0);  /* CE */
-
-}
 
 /******************************************************************************
  * @brief Set up UART
@@ -364,11 +360,8 @@ void GPIO_EVEN_IRQHandler(void) {
 
     GPIO_IntDisable(0x0010);
 
-    ASSERT_MAX_TDC_CE;
-    spi_return[0] = MAX_SPI_CMD(READ_INT_STAT_REG);     // Read status register
-    spi_return[1] = MAX_SPI_CMD(NULL_CMD);
-    spi_return[2] = MAX_SPI_CMD(NULL_CMD);
-    DEASSERT_MAX_TDC_CE;
+    spi_tx_buffer[0] = READ_INT_STAT_REG;
+    MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[1]);      // Read status register
 
     GPIO_IntClear(0x0010);
 }
@@ -379,61 +372,58 @@ int main(void)
     /* Chip errata */
     CHIP_Init();
 
-    SPI_init();
+    //SPI_init();
+    SPIDRV_Init_t initData = {                                                                         \
+    		  USART1,                       /* USART port                       */    \
+    		  _USART_ROUTE_LOCATION_LOC1,   /* USART pins location number       */    \
+    		  1000000,                      /* Bitrate                          */    \
+    		  8,                            /* Frame length                     */    \
+    		  0,                            /* Dummy tx value for rx only funcs */    \
+    		  spidrvMaster,                 /* SPI mode                         */    \
+    		  spidrvBitOrderMsbFirst,       /* Bit order on bus                 */    \
+    		  spidrvClockMode1,             /* SPI clock/phase mode             */    \
+    		  spidrvCsControlAuto,          /* CS controlled by the driver      */    \
+    		  spidrvSlaveStartImmediate     /* Slave start transfers immediately*/    \
+    		};
+
+    // Initialize a SPI driver instance
+    SPIDRV_Init( spi_handle, &initData );
     UART_init();
     MAX_init();  // Initialize MAX settings through SPI
 
     setupGPIOInt();
     GPIO_IntEnable(0x0010);
 
-    // float mydata;
-
     int i;
 
-    ASSERT_MAX_TDC_CE;
-    spi_return[0] = MAX_SPI_CMD(TOF_DIFF);          // TOF Diff
-    DEASSERT_MAX_TDC_CE;
+    spi_tx_buffer[0] = TOF_DIFF;                    // TOF Diff
+    MAX_SPI_TX(&spi_tx_buffer[0]);
 
-    ASSERT_MAX_TDC_CE;
-    spi_return[0] = MAX_SPI_CMD(READ_INT_STAT_REG);     // Read status register
-    spi_return[1] = MAX_SPI_CMD(NULL_CMD);
-    spi_return[2] = MAX_SPI_CMD(NULL_CMD);
-    DEASSERT_MAX_TDC_CE;
+    spi_tx_buffer[0] = READ_INT_STAT_REG;
+    MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[1]);      // Read status register
 
     while (1) {
 
-        ASSERT_MAX_TDC_CE;
-        spi_return[0] = MAX_SPI_CMD(READ_RTC_SECS);     // Read RTC Seconds
-        spi_return[7] = MAX_SPI_CMD(NULL_CMD);
-        spi_return[8] = MAX_SPI_CMD(NULL_CMD);
-        DEASSERT_MAX_TDC_CE;
+    	spi_tx_buffer[0] = READ_RTC_SECS;           // Read RTC Seconds
+        MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[7]);
 
         // TOF Interrupt (bit 12)
-        if((0x10 & spi_return[1]) == 0x10)
+        if((0x10 & spi_rx_buffer[1]) == 0x10)
         {
-        	ASSERT_MAX_TDC_CE;
-        	spi_return[0] = MAX_SPI_CMD(TOF_DIFF_INT); 	    // Read TOF_DIFFInt
-        	spi_return[3] = MAX_SPI_CMD(NULL_CMD);
-        	spi_return[4] = MAX_SPI_CMD(NULL_CMD);
-        	DEASSERT_MAX_TDC_CE;
+        	spi_tx_buffer[0] = TOF_DIFF_INT; 	    // Read TOF_DIFFInt
+            MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[3]);
 
-        	ASSERT_MAX_TDC_CE;
-        	spi_return[0] = MAX_SPI_CMD(TOF_DIFF_FRAC);     // Read TOF_DIFFFrac
-        	spi_return[5] = MAX_SPI_CMD(NULL_CMD);
-        	spi_return[6] = MAX_SPI_CMD(NULL_CMD);
-        	DEASSERT_MAX_TDC_CE;
+            spi_tx_buffer[0] = TOF_DIFF_FRAC;       // Read TOF_DIFFFrac
+            MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[5]);
 
         	USART_Tx(USART0, 0x46);
 
-        	spi_return[1] = 0x00;
+        	spi_rx_buffer[1] = 0x00;
             GPIO_IntEnable(0x0010);
 
-            ASSERT_MAX_TDC_CE;
-            spi_return[0] = MAX_SPI_CMD(TOF_DIFF);          // TOF Diff
-            DEASSERT_MAX_TDC_CE;
+            spi_tx_buffer[0] = TOF_DIFF;     // TOF Diff
+            MAX_SPI_TX(&spi_tx_buffer[0]);
         }
-
-        // mydata = *((float*)(&readbuf[2]));
 
         for(i = 0; i < 1000; i++){}
         i = 0;

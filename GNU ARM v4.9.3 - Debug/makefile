@@ -31,7 +31,7 @@ all: WonderGecko_MAX35103.axf
 WonderGecko_MAX35103.axf: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GNU ARM C Linker'
-	arm-none-eabi-gcc -g -gdwarf-2 -mcpu=cortex-m4 -mthumb -T "WonderGecko_MAX35103.ld" -Xlinker --gc-sections -Xlinker -Map="WonderGecko_MAX35103.map" -mfpu=fpv4-sp-d16 -mfloat-abi=softfp --specs=nano.specs -o WonderGecko_MAX35103.axf "./CMSIS/EFM32WG/startup_efm32wg.o" "./CMSIS/EFM32WG/system_efm32wg.o" "./emlib/em_cmu.o" "./emlib/em_emu.o" "./emlib/em_gpio.o" "./emlib/em_system.o" "./emlib/em_usart.o" "./src/main.o" -Wl,--start-group -lgcc -lc -lnosys -Wl,--end-group
+	arm-none-eabi-gcc -g -gdwarf-2 -mcpu=cortex-m4 -mthumb -T "WonderGecko_MAX35103.ld" -Xlinker --gc-sections -Xlinker -Map="WonderGecko_MAX35103.map" -mfpu=fpv4-sp-d16 -mfloat-abi=softfp --specs=nano.specs -o WonderGecko_MAX35103.axf "./CMSIS/EFM32WG/startup_efm32wg.o" "./CMSIS/EFM32WG/system_efm32wg.o" "./emlib/dmactrl.o" "./emlib/dmadrv.o" "./emlib/em_cmu.o" "./emlib/em_core.o" "./emlib/em_dma.o" "./emlib/em_emu.o" "./emlib/em_gpio.o" "./emlib/em_rtc.o" "./emlib/em_system.o" "./emlib/em_usart.o" "./emlib/rtcdriver.o" "./emlib/spidrv.o" "./emlib/uartdrv.o" "./src/main.o" -Wl,--start-group -lgcc -lc -lnosys -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
