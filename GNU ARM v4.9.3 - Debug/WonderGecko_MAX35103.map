@@ -929,12 +929,12 @@ LOAD c:/siliconlabs/simplicitystudio/v4/developer/toolchains/gnu_arm/4.9_2015q3/
                 0x00003ae4       0x38 ./src/main.o
  .text.CHIP_Init
                 0x00003b1c        0xc ./src/main.o
- .text.MAX_init
+ .text.MAX_Init
                 0x00003b28      0x15c ./src/main.o
-                0x00003b28                MAX_init
- .text.UART_init
+                0x00003b28                MAX_Init
+ .text.UART_Init
                 0x00003c84       0xb0 ./src/main.o
-                0x00003c84                UART_init
+                0x00003c84                UART_Init
  .text.setupGPIOInt
                 0x00003d34       0x34 ./src/main.o
                 0x00003d34                setupGPIOInt
@@ -1203,7 +1203,7 @@ OUTPUT(WonderGecko_MAX35103.axf elf32-littlearm)
  .comment       0x00000000       0x71 ./emlib/spidrv.o
  .comment       0x00000000       0x71 ./src/main.o
 
-.debug_line     0x00000000     0x4aa8
+.debug_line     0x00000000     0x4aaa
  .debug_line    0x00000000       0xd3 ./CMSIS/EFM32WG/startup_efm32wg.o
  .debug_line    0x000000d3      0x38a ./CMSIS/EFM32WG/system_efm32wg.o
  .debug_line    0x0000045d      0x21d ./emlib/dmactrl.o
@@ -1216,7 +1216,7 @@ OUTPUT(WonderGecko_MAX35103.axf elf32-littlearm)
  .debug_line    0x00002a69      0x5c5 ./emlib/em_usart.o
  .debug_line    0x0000302e      0x689 ./emlib/rtcdriver.o
  .debug_line    0x000036b7      0xdeb ./emlib/spidrv.o
- .debug_line    0x000044a2      0x606 ./src/main.o
+ .debug_line    0x000044a2      0x608 ./src/main.o
 
 .debug_info     0x00000000     0xa8a3
  .debug_info    0x00000000       0xf6 ./CMSIS/EFM32WG/startup_efm32wg.o
@@ -1302,7 +1302,7 @@ OUTPUT(WonderGecko_MAX35103.axf elf32-littlearm)
  .debug_ranges  0x000005e8      0x118 ./emlib/spidrv.o
  .debug_ranges  0x00000700       0x70 ./src/main.o
 
-.debug_str      0x00000000     0x3ea2
+.debug_str      0x00000000     0x3ea7
  .debug_str     0x00000000      0x4bb ./CMSIS/EFM32WG/system_efm32wg.o
                                 0x542 (size before relaxing)
  .debug_str     0x000004bb       0x93 ./emlib/dmactrl.o
@@ -1313,19 +1313,19 @@ OUTPUT(WonderGecko_MAX35103.axf elf32-littlearm)
                                 0xdbb (size before relaxing)
  .debug_str     0x000020db      0x30f ./emlib/em_core.o
                                 0x875 (size before relaxing)
- .debug_str     0x000023ea      0x2ee ./emlib/em_dma.o
+ .debug_str     0x000023ea      0x2f3 ./emlib/em_dma.o
                                 0xdae (size before relaxing)
- .debug_str     0x000026d8      0x3bb ./emlib/em_gpio.o
+ .debug_str     0x000026dd      0x3bb ./emlib/em_gpio.o
                                 0x61a (size before relaxing)
- .debug_str     0x00002a93       0xbe ./emlib/em_rtc.o
+ .debug_str     0x00002a98       0xbe ./emlib/em_rtc.o
                                 0x300 (size before relaxing)
- .debug_str     0x00002b51      0x960 ./emlib/em_usart.o
+ .debug_str     0x00002b56      0x960 ./emlib/em_usart.o
                                 0xe1c (size before relaxing)
- .debug_str     0x000034b1      0x2fd ./emlib/rtcdriver.o
+ .debug_str     0x000034b6      0x2fd ./emlib/rtcdriver.o
                                 0xbf4 (size before relaxing)
- .debug_str     0x000037ae      0x610 ./emlib/spidrv.o
+ .debug_str     0x000037b3      0x610 ./emlib/spidrv.o
                                0x1c79 (size before relaxing)
- .debug_str     0x00003dbe       0xe4 ./src/main.o
+ .debug_str     0x00003dc3       0xe4 ./src/main.o
                                0x1af4 (size before relaxing)
 
 .debug_frame    0x00000000     0x234c
