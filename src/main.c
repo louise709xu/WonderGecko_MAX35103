@@ -44,11 +44,11 @@ uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH];
 
 
 /*******************************************************************************
- * @function��� MAX_Init()
- * @abstract��� Initialize MAX35103 settings
- * @discussion� Set up TOF1/2/3/4/5/6/7 registers and initialize MAX board
+ * @function    MAX_Init()
+ * @abstract    Initialize MAX35103 settings
+ * @discussion  Set up TOF1/2/3/4/5/6/7 registers and initialize MAX board
  *
- * @return����� void
+ * @return      void
  ******************************************************************************/
 void MAX_Init()
 {
@@ -199,12 +199,12 @@ void SPI_Init() {
 
 
 /*******************************************************************************
-�* @function��� UART_Init()
-�* @abstract��� Set up UART
-�* @discussion� Enable clocks, set GPIO pinmode, clear interrupts, enable USART
+ * @function    UART_Init()
+ * @abstract    Set up UART
+ * @discussion  Enable clocks, set GPIO pinmode, clear interrupts, enable USART
  *
-�* @return����� void
-�******************************************************************************/
+ * @return      void
+ ******************************************************************************/
 void UART_Init() {
 
     CMU_ClockEnable(cmuClock_HFPER, true);
