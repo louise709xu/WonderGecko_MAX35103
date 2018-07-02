@@ -1,0 +1,95 @@
+<?xml version="1.0" standalone="yes"?>
+<NewDataSet>
+  <xs:schema id="NewDataSet" xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xs:element name="NewDataSet" msdata:IsDataSet="true" msdata:MainDataTable="settings" msdata:UseCurrentLocale="true">
+      <xs:complexType>
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="settings">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="key" type="xs:string" minOccurs="0" />
+                <xs:element name="value" type="xs:anyType" minOccurs="0" />
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+        </xs:choice>
+      </xs:complexType>
+    </xs:element>
+  </xs:schema>
+  <settings>
+    <key>Device</key>
+    <value xsi:type="xs:string" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">MAX35101</value>
+  </settings>
+  <settings>
+    <key>SecondsRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">26950</value>
+  </settings>
+  <settings>
+    <key>MinsHrsRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">17152</value>
+  </settings>
+  <settings>
+    <key>MonthYearRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0</value>
+  </settings>
+  <settings>
+    <key>WatchdogAlarmCounterRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0</value>
+  </settings>
+  <settings>
+    <key>AlarmRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0</value>
+  </settings>
+  <settings>
+    <key>TOF1Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">3088</value>
+  </settings>
+  <settings>
+    <key>TOF2Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">41216</value>
+  </settings>
+  <settings>
+    <key>TOF3Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">1286</value>
+  </settings>
+  <settings>
+    <key>TOF4Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">1800</value>
+  </settings>
+  <settings>
+    <key>TOF5Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">2314</value>
+  </settings>
+  <settings>
+    <key>TOF6Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">8970</value>
+  </settings>
+  <settings>
+    <key>TOF7Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">8970</value>
+  </settings>
+  <settings>
+    <key>EventTiming1Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">3968</value>
+  </settings>
+  <settings>
+    <key>EventTiming2Register</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">32767</value>
+  </settings>
+  <settings>
+    <key>TOFMeasurementDelayRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">200</value>
+  </settings>
+  <settings>
+    <key>CalibrationAndControlRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">4063</value>
+  </settings>
+  <settings>
+    <key>RealTimeClockRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0</value>
+  </settings>
+  <settings>
+    <key>ControlRegisterRegister</key>
+    <value xsi:type="xs:int" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0</value>
+  </settings>
+</NewDataSet>
