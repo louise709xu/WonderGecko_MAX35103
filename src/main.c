@@ -7,6 +7,7 @@
 #include "spidrv.h"
 #include "uartdrv.h"
 #include "string.h"
+#include "gpiointerrupt.h"
 
 #include "max_macros.h"
 
@@ -238,6 +239,18 @@ void UART_Init() {
 }
 
 
+void GPIOINT_callback(void) {
+    // TODO Multiple interrupts on EVEN_IRQHandler
+
+    GPIO_IntDisable(0x0010);
+
+    spi_tx_buffer[0] = READ_INT_STAT_REG;
+    MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[2]);      // Read status register
+
+    GPIO_IntClear(0x0010);
+}
+
+
 /*******************************************************************************
  * @function    setupGPIOInt()
  * @abstract    Enable GPIO Interrupts
@@ -248,11 +261,12 @@ void UART_Init() {
 void setupGPIOInt() {
 
     GPIO_PinModeSet(gpioPortD, 4, gpioModeInput, 1);  // MAX Interrupt
-    GPIO_IntConfig(gpioPortD, 4, true, true, true);
+    GPIO_ExtIntConfig(gpioPortD, 4, 4, true, true, true);
 
-    NVIC_ClearPendingIRQ(GPIO_EVEN_IRQn);
-    NVIC_EnableIRQ(GPIO_EVEN_IRQn);
+    GPIOINT_Init();
+    GPIOINT_CallbackRegister(4, (GPIOINT_IrqCallbackPtr_t) GPIOINT_callback);
 
+    GPIO_IntEnable(0x0010);
 }
 
 
@@ -263,6 +277,7 @@ void setupGPIOInt() {
  *
  * @return      void
  ******************************************************************************/
+/*
 void GPIO_EVEN_IRQHandler(void) {
     // TODO Multiple interrupts on EVEN_IRQHandler
 
@@ -273,6 +288,7 @@ void GPIO_EVEN_IRQHandler(void) {
 
     GPIO_IntClear(0x0010);
 }
+*/
 
 /*******************************************************************************
  * @function    main()
@@ -290,9 +306,7 @@ int main(void) {
     SPI_Init();
     UART_Init();
     MAX_Init();
-
     setupGPIOInt();
-    GPIO_IntEnable(0x0010);
 
     int i;
 
