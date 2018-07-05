@@ -10,9 +10,7 @@
 
 #include "max_macros.h"
 
-/* ----- SPI Declarations ----- */
-
-/* @var SPI_TX_CONFIG_BUF_LENGTH Configuration requires 3 bytes transferred */
+/* @var SPI_TX_CONFIG_GUF_LENGTH Configuration requires 3 bytes transferred */
 #define SPI_TX_CONFIG_BUF_LENGTH 3
 /* @var SPI_TX_BUF_LENGTH OP code commands only transfer 1 byte and receive 2 bytes */
 #define SPI_TX_BUF_LENGTH 1
@@ -37,24 +35,12 @@ uint8_t spi_tx_buffer[SPI_TX_BUF_LENGTH];
  ******************************************************************************/
 uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH];
 
+
 // MAX SPI Transfer
 #define MAX_SPI_TX_Config(x)    SPIDRV_MTransmitB(spi_handle, x, 3);
 #define MAX_SPI_TX(x)           SPIDRV_MTransmitB(spi_handle, x, 1);
 #define MAX_SPI_RX(x)           SPIDRV_MReceiveB(spi_handle, x, 1);
 #define MAX_SPI_TXRX(x,y)       SPIDRV_MTransferB(spi_handle, x, y, 3);
-
-
-
-/* ----- UART Declarations ----- */
-
-DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_RX_BUFS, rxBufferQueue);
-DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_TX_BUFS, txBufferQueue);
-
-UARTDRV_HandleData_t uart_handleData;
-UARTDRV_Handle_t uart_handle = &uart_handleData;
-uint8_t buffer[64];
-
-RTCDRV_TimerID_t rtc_id;
 
 
 /*******************************************************************************
@@ -193,7 +179,7 @@ void MAX_Init()
  ******************************************************************************/
 void SPI_Init() {
 
-    SPIDRV_Init_t spiInitData = {                                                     \
+    SPIDRV_Init_t initData = {                                                        \
               USART1,                       /* USART port                       */    \
               _USART_ROUTE_LOCATION_LOC1,   /* USART pins location number       */    \
               1000000,                      /* Bitrate                          */    \
@@ -207,7 +193,7 @@ void SPI_Init() {
     };
 
     // Initialize a SPI driver instance
-    SPIDRV_Init( spi_handle, &spiInitData );
+    SPIDRV_Init( spi_handle, &initData );
 
 }
 
@@ -220,54 +206,35 @@ void SPI_Init() {
  * @return      void
  ******************************************************************************/
 void UART_Init() {
-	UARTDRV_InitUart_t uartInitData = {
-		USART0,                                             \
-		115200,                                             \
-		_USART_ROUTE_LOCATION_LOC5,                         \
-		usartStopbits1,                                     \
-		usartNoParity,                                      \
-		usartOVS16,                                         \
-		false,                                              \
-		uartdrvFlowControlNone,                             \
-		gpioPortE,                                          \
-		12,                                                 \
-		gpioPortE,                                          \
-		13,                                                 \
-		(UARTDRV_Buffer_FifoQueue_t *)&rxBufferQueue,       \
-		(UARTDRV_Buffer_FifoQueue_t *)&txBufferQueue,       \
-	};
 
-	UARTDRV_InitUart(uart_handle, &uartInitData);
-}
+    CMU_ClockEnable(cmuClock_HFPER, true);
+    CMU_ClockEnable(cmuClock_USART0, true); // Enable clock for USART0 module
+    CMU_ClockEnable(cmuClock_GPIO, true);
 
-void callback_UARTTX(UARTDRV_Handle_t handle,
-                           Ecode_t transferStatus,
-                           uint8_t *data,
-                           UARTDRV_Count_t transferCount)
-{
-  (void)handle;
-  (void)transferStatus;
-  (void)data;
-  (void)transferCount;
-}
+    GPIO_PinModeSet(gpioPortC, 0, gpioModePushPull, 1); // TX
+    GPIO_PinModeSet(gpioPortC, 1, gpioModeInput, 0); // RX
 
-void callback_UARTRX(UARTDRV_Handle_t handle,
-                           Ecode_t transferStatus,
-                           uint8_t *data,
-                           UARTDRV_Count_t transferCount)
-{
-  (void)handle;
-  (void)transferStatus;
-  (void)data;
-  (void)transferCount;
-}
+    USART_InitAsync_TypeDef usartInitUSART0 = {
+        .enable = usartDisable,                     // Initially disabled
+        .refFreq = 0,                               // configured reference frequency
+        .baudrate = 115200,                         // Baud rate defined in common.h
+        .oversampling = usartOVS16,                 // overSampling rate x16
+        .databits = USART_FRAME_DATABITS_EIGHT,     // 8-bit frames
+        .parity = USART_FRAME_PARITY_NONE,          // parity - none
+        .stopbits = USART_FRAME_STOPBITS_ONE,       // 1 stop bit
+    };
 
-void callback_RTC( RTCDRV_TimerID_t id, void * user )
-{
-  (void) user; // unused argument in this example
+    /*Initialize UART registers*/
+    USART_InitAsync(USART0, &usartInitUSART0);
 
-  buffer[0] = 's';
-  UARTDRV_Transmit(uart_handle, buffer, 1, callback_UARTTX);
+    USART0 -> ROUTE = USART_ROUTE_RXPEN | USART_ROUTE_TXPEN | USART_ROUTE_LOCATION_LOC5;
+
+    /* Inform NVIC of IRQ changes*/
+    NVIC_ClearPendingIRQ(USART0_TX_IRQn);
+    NVIC_EnableIRQ(USART0_TX_IRQn);
+
+    USART_Enable(USART0, usartEnable);
+    NVIC_SetPriority(USART0_TX_IRQn, 1);
 }
 
 
@@ -323,12 +290,6 @@ int main(void) {
     SPI_Init();
     UART_Init();
     MAX_Init();
-    RTCDRV_Init();
-
-    // Reserve a timer
-    Ecode_t max_rtc = RTCDRV_AllocateTimer( &rtc_id );
-    // Start a periodic timer with 100 millisecond timeout
-    RTCDRV_StartTimer( rtc_id, rtcdrvTimerTypePeriodic, 100, callback_RTC, NULL );
 
     setupGPIOInt();
     GPIO_IntEnable(0x0010);
@@ -355,6 +316,8 @@ int main(void) {
 
             spi_tx_buffer[0] = TOF_DIFF_FRAC;
             MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[10]);
+
+        	USART_Tx(USART0, 0x46);
 
         	spi_rx_buffer[1] = 0x00;
             GPIO_IntEnable(0x0010);
