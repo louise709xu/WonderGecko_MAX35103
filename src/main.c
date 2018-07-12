@@ -267,7 +267,7 @@ void callback_RTC( RTCDRV_TimerID_t id, void * user )
 {
   (void) user; // unused argument in this example
 
-  buffer[0] = 's';
+  buffer[0] = 'c';
   UARTDRV_Transmit(uart_handle, buffer, 1, callback_UARTTX);
 }
 
@@ -325,8 +325,8 @@ int main(void) {
 
     // Reserve a timer
     Ecode_t max_rtc = RTCDRV_AllocateTimer( &rtc_id );
-    // Start a periodic timer with 100 millisecond timeout
-    RTCDRV_StartTimer( rtc_id, rtcdrvTimerTypePeriodic, 100, callback_RTC, NULL );
+    // Start a periodic timer with 1000 millisecond timeout
+    RTCDRV_StartTimer( rtc_id, rtcdrvTimerTypePeriodic, 1000, callback_RTC, NULL );
 
     int i;
 
