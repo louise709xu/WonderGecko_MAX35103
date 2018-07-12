@@ -263,15 +263,14 @@ void callback_UARTRX(UARTDRV_Handle_t handle,
   (void)transferCount;
 }
 
+/*
 void callback_RTC( RTCDRV_TimerID_t id, void * user )
 {
   (void) user; // unused argument in this example
 
-  buffer[0] = 'c';
-  UARTDRV_Transmit(uart_handle, buffer, 1, callback_UARTTX);
+
 }
-
-
+*/
 
 void GPIOINT_callback(void) {
     // TODO Multiple interrupts on EVEN_IRQHandler
@@ -321,12 +320,15 @@ int main(void) {
     UART_Init();
     MAX_Init();
     setupGPIOInt();
+
+    /*
     RTCDRV_Init();
 
     // Reserve a timer
     Ecode_t max_rtc = RTCDRV_AllocateTimer( &rtc_id );
     // Start a periodic timer with 1000 millisecond timeout
     RTCDRV_StartTimer( rtc_id, rtcdrvTimerTypePeriodic, 1000, callback_RTC, NULL );
+    */
 
     int i;
 
@@ -350,6 +352,8 @@ int main(void) {
 
             spi_tx_buffer[0] = TOF_DIFF_FRAC;
             MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[10]);
+
+            UARTDRV_Transmit(uart_handle, spi_rx_buffer, SPI_RX_BUF_LENGTH, callback_UARTTX);
 
         	spi_rx_buffer[1] = 0x00;
             GPIO_IntEnable(0x0010);
