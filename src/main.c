@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <unistd.h>
 #include "em_device.h"
 #include "em_chip.h"
@@ -11,13 +12,15 @@
 
 #include "max_macros.h"
 
+#include <time.h>
+
 /* ----- SPI Declarations ----- */
 
 /* @var SPI_TX_CONFIG_GUF_LENGTH Configuration requires 3 bytes transferred */
 #define SPI_TX_CONFIG_BUF_LENGTH 3
 /* @var SPI_TX_BUF_LENGTH OP code commands only transfer 1 byte and receive 2 bytes */
 #define SPI_TX_BUF_LENGTH 1
-#define SPI_RX_BUF_LENGTH 20
+#define SPI_RX_BUF_LENGTH 21
 
 SPIDRV_HandleData_t spi_handleData;
 SPIDRV_Handle_t spi_handle = &spi_handleData;
@@ -30,11 +33,13 @@ uint8_t spi_tx_buffer[SPI_TX_BUF_LENGTH];
  * @abstract Stores information received from the MAX board
  * @discussion The measurements and values from the MAX board are stored in the
  *             address locations:
- *             spi_rx_buffer[0:1]   Reserved
- *             spi_rx_buffer[2:5] Interrupt Status Register
- *             spi_rx_buffer[6:9] TOF Int
- *             spi_rx_buffer[10:13] TOF Frac
- *             spi_rx_buffer[14:17] RTC Seconds
+ *             spi_rx_buffer[0:2]   Interrupt Status Register
+ *             spi_rx_buffer[3:5]   TOF Int
+ *             spi_rx_buffer[6:8]   TOF Frac
+ *             spi_rx_buffer[9:11]  RTC Month_Year
+ *             spi_rx_buffer[12:14] RTC Day_Date
+ *             spi_rx_buffer[15:17] RTC Min_Hours
+ *             spi_rx_buffer[18:20] RTC Seconds
  ******************************************************************************/
 uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH];
 
@@ -47,13 +52,42 @@ uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH];
 
 
 /* ----- UART Declarations ----- */
+#define UART_TX_BUF_LENGTH 21
 
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_RX_BUFS, rxBufferQueue);
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_TX_BUFS, txBufferQueue);
 
 UARTDRV_HandleData_t uart_handleData;
 UARTDRV_Handle_t uart_handle = &uart_handleData;
-uint8_t buffer[64];
+
+/*******************************************************************************
+ * @var uart_tx_buffer
+ * @abstract Stores information received from the MAX board
+ * @discussion The measurements and values from the MAX board are stored in the
+ *             address locations:
+ *             uart_tx_buffer[0]    10 Month
+ *             uart_tx_buffer[1]    Month
+ *             uart_tx_buffer[2]    '/'
+ *             uart_tx_buffer[3]    10 Date
+ *             uart_tx_buffer[4]    Date
+ *             uart_tx_buffer[5]    '/'
+ *             uart_tx_buffer[6]    10 Year
+ *             uart_tx_buffer[7]    Year
+ *             uart_tx_buffer[8]    ' '
+ *             uart_tx_buffer[9]    10 Hour
+ *             uart_tx_buffer[10]   Hour
+ *             uart_tx_buffer[11]   ':'
+ *             uart_tx_buffer[12]   10 Minute
+ *             uart_tx_buffer[13]   Minute
+ *             uart_tx_buffer[14]   ':'
+ *             uart_tx_buffer[15]   10 Seconds
+ *             uart_tx_buffer[16]   Seconds
+ *             uart_tx_buffer[17]   ':'
+ *             uart_tx_buffer[18]   Tenths of Seconds
+ *             uart_tx_buffer[19]   Hundredths of Seconds
+ *             uart_tx_buffer[20]   '\n'
+ ******************************************************************************/
+uint8_t uart_tx_buffer[UART_TX_BUF_LENGTH];
 
 RTCDRV_TimerID_t rtc_id;
 
@@ -165,8 +199,8 @@ void MAX_Init()
      * Calibration and Control Register - calibration settings
      * CLBRT[15:11] Temperature Measurement Cycles
      * CLBRT[10]    Calibration Usage
-     * CLBRT[9:7]   Calibration COnfiguration
-     * CLBRT[6:5]   Temperature POrt
+     * CLBRT[9:7]   Calibration Configuration
+     * CLBRT[6:5]   Temperature Port
      * CLBRT[4:2]   Preamble Temperature Cycle
      * CLBRT[1:0]   Port Cycle Time
      **************************************************************************/
@@ -278,7 +312,7 @@ void GPIOINT_callback(void) {
     GPIO_IntDisable(0x0010);
 
     spi_tx_buffer[0] = READ_INT_STAT_REG;
-    MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[2]);      // Read status register
+    MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[0]);      // Read status register
 
     GPIO_IntClear(0x0010);
 }
@@ -302,6 +336,17 @@ void setupGPIOInt() {
     GPIO_IntEnable(0x0010);
 }
 
+void delay(int number_of_seconds)
+{
+    // Converting time into milli_seconds
+    int milli_seconds = 1000 * number_of_seconds;
+
+    // Stroing start time
+    clock_t start_time = clock();
+
+    // looping till required time is not acheived
+    while (clock() < start_time + milli_seconds);
+}
 
 /*******************************************************************************
  * @function    main()
@@ -330,40 +375,110 @@ int main(void) {
     RTCDRV_StartTimer( rtc_id, rtcdrvTimerTypePeriodic, 1000, callback_RTC, NULL );
     */
 
-    int i;
+    uart_tx_buffer[2] = uart_tx_buffer[5] = '/';
+    uart_tx_buffer[8] = ' ';
+    uart_tx_buffer[11] = uart_tx_buffer[14] = uart_tx_buffer[17] = ':';
+    uart_tx_buffer[20] = 0x09;
 
     spi_tx_buffer[0] = TOF_DIFF;
     MAX_SPI_TX(&spi_tx_buffer[0]);
 
     spi_tx_buffer[0] = READ_INT_STAT_REG;
-    MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[2]);
+    MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[0]);
 
     while (1) {
 
+    	// For debugging purposes
+    	spi_tx_buffer[0] = READ_RTC_M_Y;
+        MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[9]);
+
+    	spi_tx_buffer[0] = READ_RTC_DAY_DATE;
+        MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[12]);
+
     	spi_tx_buffer[0] = READ_RTC_MIN_HRS;
-    	//spi_tx_buffer[0] = READ_RTC_SECS;
-        MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[14]);
+        MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[15]);
+
+    	spi_tx_buffer[0] = READ_RTC_SECS;
+        MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[18]);
+
+        // Bitwise operations to separate data in each register
+        uart_tx_buffer[0] = ((spi_rx_buffer[10] & 0x10) >> 4) + 0x30;   // 10 Month
+        uart_tx_buffer[1] = (spi_rx_buffer[10] & 0x0F) + 0x30;          // Month
+        uart_tx_buffer[3] = ((spi_rx_buffer[14] & 0x30) >> 4) + 0x30;   // 10 Date
+        uart_tx_buffer[4] = (spi_rx_buffer[14] & 0x0F) + 0x30;          // Date
+        uart_tx_buffer[6] = ((spi_rx_buffer[11] & 0xF0) >> 4) + 0x30;   // 10 Year
+        uart_tx_buffer[7] = (spi_rx_buffer[11] & 0x0F) + 0x30;          // Year
+    	uart_tx_buffer[9] = ((spi_rx_buffer[17] & 0x30) >> 4) + 0x30;   // 10 Hour (tens digit stays the same regardless 12/24 hr)
+        if((spi_rx_buffer[17] & 0x40) == 0x40){                         // if 12 hour mode
+        	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x32;      // Hour (add 2)
+        }
+        else {                                                          // if 24 hour mode
+        	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x30;      // Hour
+        }
+        uart_tx_buffer[12] = ((spi_rx_buffer[16] & 0x70) >> 4) + 0x30;   // 10 Minute
+        uart_tx_buffer[13] = (spi_rx_buffer[16] & 0x0F) + 0x30;          // Minute
+        uart_tx_buffer[15] = ((spi_rx_buffer[20] & 0x70) >> 4) + 0x30;  // 10 Second
+        uart_tx_buffer[16] = (spi_rx_buffer[20] & 0x0F) + 0x30;         // Second
+        uart_tx_buffer[18] = ((spi_rx_buffer[19] & 0xF0) >> 4) + 0x30;  // Tenth of Second
+        uart_tx_buffer[19] = (spi_rx_buffer[19] & 0x0F) + 0x30;         // Hundredth of Second
+
+        UARTDRV_Transmit(uart_handle, uart_tx_buffer, UART_TX_BUF_LENGTH, callback_UARTTX);
+
+        delay(10);
 
         // TOF Interrupt (bit 12)
-        if((0x10 & spi_rx_buffer[3]) == 0x10)
-        {
+        if((0x10 & spi_rx_buffer[1]) == 0x10) {
+
+        	// Read data from MAX board registers
+        	spi_tx_buffer[0] = READ_RTC_SECS;
+            MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[18]);
+
+        	spi_tx_buffer[0] = READ_RTC_MIN_HRS;
+            MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[15]);
+
+        	spi_tx_buffer[0] = READ_RTC_DAY_DATE;
+            MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[12]);
+
+        	spi_tx_buffer[0] = READ_RTC_M_Y;
+            MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[9]);
+
         	spi_tx_buffer[0] = TOF_DIFF_INT;
-            MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[6]);
+            MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[3]);
 
             spi_tx_buffer[0] = TOF_DIFF_FRAC;
-            MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[10]);
+            MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[6]);
 
-            UARTDRV_Transmit(uart_handle, spi_rx_buffer, SPI_RX_BUF_LENGTH, callback_UARTTX);
+            // Bitwise operations to separate data in each register
+            uart_tx_buffer[0] = ((spi_rx_buffer[10] & 0x10) >> 4) + 0x30;   // 10 Month
+            uart_tx_buffer[1] = (spi_rx_buffer[10] & 0x0F) + 0x30;          // Month
+            uart_tx_buffer[2] = ((spi_rx_buffer[14] & 0x30) >> 4) + 0x30;   // 10 Date
+            uart_tx_buffer[3] = (spi_rx_buffer[14] & 0x0F) + 0x30;          // Date
+            uart_tx_buffer[4] = ((spi_rx_buffer[11] & 0xF0) >> 4) + 0x30;   // 10 Year
+            uart_tx_buffer[5] = (spi_rx_buffer[11] & 0x0F) + 0x30;          // Year
+        	uart_tx_buffer[6] = ((spi_rx_buffer[17] & 0x30) >> 4) + 0x30;   // 10 Hour (tens digit stays the same regardless 12/24 hr)
+            if((spi_rx_buffer[17] & 0x40) == 0x40){                         // if 12 hour mode
+            	uart_tx_buffer[7] = (spi_rx_buffer[17] & 0x0F) + 0x32;      // Hour (add 2)
+            }
+            else {                                                          // if 24 hour mode
+            	uart_tx_buffer[7] = (spi_rx_buffer[17] & 0x0F) + 0x30;      // Hour
+            }
+            uart_tx_buffer[8] = ((spi_rx_buffer[16] & 0x70) >> 4) + 0x30;   // 10 Minute
+            uart_tx_buffer[9] = (spi_rx_buffer[16] & 0x0F) + 0x30;          // Minute
+            uart_tx_buffer[10] = ((spi_rx_buffer[20] & 0x70) >> 4) + 0x30;  // 10 Second
+            uart_tx_buffer[11] = (spi_rx_buffer[20] & 0x0F) + 0x30;         // Second
+            uart_tx_buffer[12] = ((spi_rx_buffer[19] & 0xF0) >> 4) + 0x30;  // Tenth of Second
+            uart_tx_buffer[12] = (spi_rx_buffer[19] & 0x0F) + 0x30;         // Hundredth of Second
+
+            UARTDRV_Transmit(uart_handle, uart_tx_buffer, UART_TX_BUF_LENGTH, callback_UARTTX);
 
         	spi_rx_buffer[1] = 0x00;
             GPIO_IntEnable(0x0010);
 
             spi_tx_buffer[0] = TOF_DIFF;
             MAX_SPI_TX(&spi_tx_buffer[0]);
+
         }
 
-        for(i = 0; i < 1000; i++){}
-        i = 0;
-
     }
+
 }
