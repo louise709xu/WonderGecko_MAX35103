@@ -10,15 +10,17 @@
 #include "gpiointerrupt.h"
 
 #include "max_macros.h"
-
+#include "int_2hex.h"
 #include <time.h>
 
 /* ----- SPI Declarations ----- */
 
-/* @var SPI_TX_CONFIG_GUF_LENGTH Configuration requires 3 bytes transferred */
+/* @var SPI_TX_CONFIG_BUF_LENGTH  Configuration requires 3 bytes transferred */
 #define SPI_TX_CONFIG_BUF_LENGTH 3
-/* @var SPI_TX_BUF_LENGTH OP code commands only transfer 1 byte and receive 2 bytes */
+/* @var SPI_TX_BUF_LENGTH  OP code commands only transfer 1 byte and receive 2 bytes */
 #define SPI_TX_BUF_LENGTH 1
+/* @var SPI_RX_BUF_LENGTH  Arbitrary, 3 bytes per data register read */
+// Needs 3 bytes per register despite 2 bytes of actual data because otherwise data gets overwritten
 #define SPI_RX_BUF_LENGTH 21
 
 SPIDRV_HandleData_t spi_handleData;
@@ -51,7 +53,7 @@ uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH];
 
 
 /* ----- UART Declarations ----- */
-#define UART_TX_BUF_LENGTH 35
+#define UART_TX_BUF_LENGTH 7
 
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_RX_BUFS, rxBufferQueue);
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_TX_BUFS, txBufferQueue);
@@ -64,34 +66,14 @@ UARTDRV_Handle_t uart_handle = &uart_handleData;
  * @abstract Stores information received from the MAX board
  * @discussion The measurements and values from the MAX board are stored in the
  *             address locations:
- *             uart_tx_buffer[0]     10 Month
- *             uart_tx_buffer[1]     Month
- *             uart_tx_buffer[2]     '/'
- *             uart_tx_buffer[3]     10 Date
- *             uart_tx_buffer[4]     Date
- *             uart_tx_buffer[5]     '/'
- *             uart_tx_buffer[6]     10 Year
- *             uart_tx_buffer[7]     Year
- *             uart_tx_buffer[8]     ' '
- *             uart_tx_buffer[9]     10 Hour
- *             uart_tx_buffer[10]    Hour
- *             uart_tx_buffer[11]    ':'
- *             uart_tx_buffer[12]    10 Minute
- *             uart_tx_buffer[13]    Minute
- *             uart_tx_buffer[14]    ':'
- *             uart_tx_buffer[15]    10 Seconds
- *             uart_tx_buffer[16]    Seconds
- *             uart_tx_buffer[17]    ':'
- *             uart_tx_buffer[18]    Tenths of Seconds
- *             uart_tx_buffer[19]    Hundredths of Seconds
- *             uart_tx_buffer[20]    ' '
- *             uart_tx_buffer[21:32] TOF Diff Frac
- *             uart_tx_buffer[33]    '\n'
- *             uart_tx_buffer[34]    '\r'
+ *             uart_rx_buffer[0] TOF Int
+ *             uart_rx_buffer[1] TOF Frac
+ *             uart_rx_buffer[2] RTC Month_Year
+ *             uart_rx_buffer[3] RTC Day_Date
+ *             uart_rx_buffer[4] RTC Min_Hours
+ *             uart_rx_buffer[5] RTC Seconds
  ******************************************************************************/
-uint8_t uart_tx_buffer[UART_TX_BUF_LENGTH];
-
-RTCDRV_TimerID_t rtc_id;
+uint32_t uart_tx_buffer[UART_TX_BUF_LENGTH];
 
 
 /*******************************************************************************
@@ -224,7 +206,7 @@ void MAX_Init()
 /*******************************************************************************
  * @function    SPI_Init()
  * @abstract    Set up SPI
- * @discussion
+ * @discussion  SPI transfer between Wonder Gecko and MAX35103
  *
  * @return      void
  ******************************************************************************/
@@ -251,8 +233,8 @@ void SPI_Init() {
 
 /*******************************************************************************
  * @function    UART_Init()
- * @abstract    Set up UART
- * @discussion  Enable clocks, set GPIO pinmode, clear interrupts, enable USART
+ * @abstract    Set up USART
+ * @discussion  USART transfer between Wonder Gecko and computer/other devices
  *
  * @return      void
  ******************************************************************************/
@@ -299,15 +281,6 @@ void callback_UARTRX(UARTDRV_Handle_t handle,
   (void)transferCount;
 }
 
-/*
-void callback_RTC( RTCDRV_TimerID_t id, void * user )
-{
-  (void) user; // unused argument in this example
-
-
-}
-*/
-
 void GPIOINT_callback(void) {
     // TODO Multiple interrupts on EVEN_IRQHandler
 
@@ -339,20 +312,6 @@ void setupGPIOInt() {
 }
 
 
-// For debugging purposes
-void delay(int number_of_seconds)
-{
-    // Converting time into milli_seconds
-    int milli_seconds = 1000 * number_of_seconds;
-
-    // Storing start time
-    clock_t start_time = clock();
-
-    // looping till required time is not achieved
-    while (clock() < start_time + milli_seconds);
-}
-
-
 
 void pollRTC() {
 	spi_tx_buffer[0] = READ_RTC_M_Y;
@@ -377,6 +336,14 @@ void pollTOF() {
 }
 
 void processRTC(){
+	uart_tx_buffer[0] = int16_2hex(*((uint16_t*)&spi_rx_buffer[4]));
+	uart_tx_buffer[1] = int16_2hex(*((uint16_t*)&spi_rx_buffer[7]));
+	uart_tx_buffer[2] = int16_2hex(*((uint16_t*)&spi_rx_buffer[10]));
+	uart_tx_buffer[3] = int16_2hex(*((uint16_t*)&spi_rx_buffer[13]));
+	uart_tx_buffer[4] = int16_2hex(*((uint16_t*)&spi_rx_buffer[16]));
+	uart_tx_buffer[5] = int16_2hex(*((uint16_t*)&spi_rx_buffer[19]));
+
+	/*
     // Bitwise operations to separate data in each register
     uart_tx_buffer[0] = ((spi_rx_buffer[10] & 0x10) >> 4) + 0x30;   // 10 Month
     uart_tx_buffer[1] = (spi_rx_buffer[10] & 0x0F) + 0x30;          // Month
@@ -386,20 +353,22 @@ void processRTC(){
     uart_tx_buffer[7] = (spi_rx_buffer[11] & 0x0F) + 0x30;          // Year
 	uart_tx_buffer[9] = ((spi_rx_buffer[17] & 0x30) >> 4) + 0x30;   // 10 Hour (tens digit stays the same regardless 12/24 hr)
     if((spi_rx_buffer[17] & 0x40) == 0x40){                         // if 12 hour mode
-    	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x32;      // Hour (add 2)
+    	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x32;     // Hour (add 2)
     }
     else {                                                          // if 24 hour mode
-    	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x30;      // Hour
+    	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x30;     // Hour
     }
-    uart_tx_buffer[12] = ((spi_rx_buffer[16] & 0x70) >> 4) + 0x30;   // 10 Minute
-    uart_tx_buffer[13] = (spi_rx_buffer[16] & 0x0F) + 0x30;          // Minute
+    uart_tx_buffer[12] = ((spi_rx_buffer[16] & 0x70) >> 4) + 0x30;  // 10 Minute
+    uart_tx_buffer[13] = (spi_rx_buffer[16] & 0x0F) + 0x30;         // Minute
     uart_tx_buffer[15] = ((spi_rx_buffer[20] & 0x70) >> 4) + 0x30;  // 10 Second
     uart_tx_buffer[16] = (spi_rx_buffer[20] & 0x0F) + 0x30;         // Second
     uart_tx_buffer[18] = ((spi_rx_buffer[19] & 0xF0) >> 4) + 0x30;  // Tenth of Second
     uart_tx_buffer[19] = (spi_rx_buffer[19] & 0x0F) + 0x30;         // Hundredth of Second
+    */
 }
 
 void processTOF(){
+	/*
 	int16_t tofDiffInt = ((spi_rx_buffer[4] & 0x00FF) << 8) | (spi_rx_buffer[5] & 0x00FF);
 	uint16_t tofDiffFrac = ((spi_rx_buffer[7] & 0x00FF) << 8) | (spi_rx_buffer[8] & 0x00FF);
 
@@ -407,7 +376,23 @@ void processTOF(){
 	float tofValueFrac = ((float) tofDiffFrac) / (65536);
 	tofValue += tofValueFrac;
 
-	sprintf(&uart_tx_buffer[21], "%12.2f", tofValue);
+	sprintf(&uart_tx_buffer[21], "%12.5f", tofValue);
+	*/
+}
+
+
+
+// For debugging purposes
+void delay(int number_of_seconds)
+{
+    // Converting time into milli_seconds
+    int milli_seconds = 1000 * number_of_seconds;
+
+    // Storing start time
+    clock_t start_time = clock();
+
+    // looping till required time is not achieved
+    while (clock() < start_time + milli_seconds);
 }
 
 
@@ -430,21 +415,6 @@ int main(void) {
     MAX_Init();
     setupGPIOInt();
 
-    /*
-    RTCDRV_Init();
-
-    // Reserve a timer
-    Ecode_t max_rtc = RTCDRV_AllocateTimer( &rtc_id );
-    // Start a periodic timer with 1000 millisecond timeout
-    RTCDRV_StartTimer( rtc_id, rtcdrvTimerTypePeriodic, 1000, callback_RTC, NULL );
-    */
-
-    uart_tx_buffer[2] = uart_tx_buffer[5] = '/';
-    uart_tx_buffer[8] = uart_tx_buffer[20] = ' ';
-    uart_tx_buffer[11] = uart_tx_buffer[14] = uart_tx_buffer[17] = ':';
-    uart_tx_buffer[33] = 0x0D;
-    uart_tx_buffer[34] = 0x0A;
-
     spi_tx_buffer[0] = TOF_DIFF;
     MAX_SPI_TX(&spi_tx_buffer[0]);
 
@@ -456,7 +426,6 @@ int main(void) {
     	// For debugging purposes
     	// pollRTC();
     	// processRTC();
-
         // UARTDRV_Transmit(uart_handle, uart_tx_buffer, UART_TX_BUF_LENGTH, callback_UARTTX);
 
         delay(100);
