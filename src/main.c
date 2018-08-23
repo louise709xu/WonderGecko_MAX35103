@@ -53,7 +53,7 @@ uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH];
 
 
 /* ----- UART Declarations ----- */
-#define UART_TX_BUF_LENGTH 7
+#define UART_TX_BUF_LENGTH 6
 
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_RX_BUFS, rxBufferQueue);
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_TX_BUFS, txBufferQueue);
@@ -62,7 +62,7 @@ UARTDRV_HandleData_t uart_handleData;
 UARTDRV_Handle_t uart_handle = &uart_handleData;
 
 /*******************************************************************************
- * @var uart_tx_buffer
+ * @var max_reg_buffer
  * @abstract Stores information received from the MAX board
  * @discussion The measurements and values from the MAX board are stored in the
  *             address locations:
@@ -73,7 +73,7 @@ UARTDRV_Handle_t uart_handle = &uart_handleData;
  *             uart_rx_buffer[4] RTC Min_Hours
  *             uart_rx_buffer[5] RTC Seconds
  ******************************************************************************/
-uint32_t uart_tx_buffer[UART_TX_BUF_LENGTH];
+uint32_t max_reg_buffer[UART_TX_BUF_LENGTH];
 
 
 /*******************************************************************************
@@ -336,48 +336,15 @@ void pollTOF() {
 }
 
 void processRTC(){
-	uart_tx_buffer[0] = int16_2hex(*((uint16_t*)&spi_rx_buffer[4]));
-	uart_tx_buffer[1] = int16_2hex(*((uint16_t*)&spi_rx_buffer[7]));
-	uart_tx_buffer[2] = int16_2hex(*((uint16_t*)&spi_rx_buffer[10]));
-	uart_tx_buffer[3] = int16_2hex(*((uint16_t*)&spi_rx_buffer[13]));
-	uart_tx_buffer[4] = int16_2hex(*((uint16_t*)&spi_rx_buffer[16]));
-	uart_tx_buffer[5] = int16_2hex(*((uint16_t*)&spi_rx_buffer[19]));
-
-	/*
-    // Bitwise operations to separate data in each register
-    uart_tx_buffer[0] = ((spi_rx_buffer[10] & 0x10) >> 4) + 0x30;   // 10 Month
-    uart_tx_buffer[1] = (spi_rx_buffer[10] & 0x0F) + 0x30;          // Month
-    uart_tx_buffer[3] = ((spi_rx_buffer[14] & 0x30) >> 4) + 0x30;   // 10 Date
-    uart_tx_buffer[4] = (spi_rx_buffer[14] & 0x0F) + 0x30;          // Date
-    uart_tx_buffer[6] = ((spi_rx_buffer[11] & 0xF0) >> 4) + 0x30;   // 10 Year
-    uart_tx_buffer[7] = (spi_rx_buffer[11] & 0x0F) + 0x30;          // Year
-	uart_tx_buffer[9] = ((spi_rx_buffer[17] & 0x30) >> 4) + 0x30;   // 10 Hour (tens digit stays the same regardless 12/24 hr)
-    if((spi_rx_buffer[17] & 0x40) == 0x40){                         // if 12 hour mode
-    	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x32;     // Hour (add 2)
-    }
-    else {                                                          // if 24 hour mode
-    	uart_tx_buffer[10] = (spi_rx_buffer[17] & 0x0F) + 0x30;     // Hour
-    }
-    uart_tx_buffer[12] = ((spi_rx_buffer[16] & 0x70) >> 4) + 0x30;  // 10 Minute
-    uart_tx_buffer[13] = (spi_rx_buffer[16] & 0x0F) + 0x30;         // Minute
-    uart_tx_buffer[15] = ((spi_rx_buffer[20] & 0x70) >> 4) + 0x30;  // 10 Second
-    uart_tx_buffer[16] = (spi_rx_buffer[20] & 0x0F) + 0x30;         // Second
-    uart_tx_buffer[18] = ((spi_rx_buffer[19] & 0xF0) >> 4) + 0x30;  // Tenth of Second
-    uart_tx_buffer[19] = (spi_rx_buffer[19] & 0x0F) + 0x30;         // Hundredth of Second
-    */
+	max_reg_buffer[2] = int16_2hex(*((uint16_t*)&spi_rx_buffer[10]));
+	max_reg_buffer[3] = int16_2hex(*((uint16_t*)&spi_rx_buffer[13]));
+	max_reg_buffer[4] = int16_2hex(*((uint16_t*)&spi_rx_buffer[16]));
+	max_reg_buffer[5] = int16_2hex(*((uint16_t*)&spi_rx_buffer[19]));
 }
 
 void processTOF(){
-	/*
-	int16_t tofDiffInt = ((spi_rx_buffer[4] & 0x00FF) << 8) | (spi_rx_buffer[5] & 0x00FF);
-	uint16_t tofDiffFrac = ((spi_rx_buffer[7] & 0x00FF) << 8) | (spi_rx_buffer[8] & 0x00FF);
-
-	float tofValue = (float) tofDiffInt;
-	float tofValueFrac = ((float) tofDiffFrac) / (65536);
-	tofValue += tofValueFrac;
-
-	sprintf(&uart_tx_buffer[21], "%12.5f", tofValue);
-	*/
+	max_reg_buffer[0] = int16_2hex(*((uint16_t*)&spi_rx_buffer[4]));
+	max_reg_buffer[1] = int16_2hex(*((uint16_t*)&spi_rx_buffer[7]));
 }
 
 
@@ -421,12 +388,20 @@ int main(void) {
     spi_tx_buffer[0] = READ_INT_STAT_REG;
     MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[0]);
 
+    uint8_t delimiter = '\t';
+
+    uint8_t test_buffer[10];
+    test_buffer[0] = 'a';
+    UARTDRV_Transmit(uart_handle, test_buffer, 10, callback_UARTTX);
+
+    int i;
+
     while (1) {
 
     	// For debugging purposes
     	// pollRTC();
     	// processRTC();
-        // UARTDRV_Transmit(uart_handle, uart_tx_buffer, UART_TX_BUF_LENGTH, callback_UARTTX);
+        // UARTDRV_Transmit(uart_handle, (uint8_t*)&max_reg_buffer, UART_TX_BUF_LENGTH * 4, callback_UARTTX);
 
         delay(100);
 
@@ -440,7 +415,10 @@ int main(void) {
             processRTC();
             processTOF();
 
-            UARTDRV_Transmit(uart_handle, uart_tx_buffer, UART_TX_BUF_LENGTH, callback_UARTTX);
+            for(i = 0; i < UART_TX_BUF_LENGTH; i++) {
+            	UARTDRV_Transmit(uart_handle, (uint8_t*)(&max_reg_buffer[i]), sizeof(uint32_t), callback_UARTTX);
+            	UARTDRV_Transmit(uart_handle, &delimiter, sizeof(uint8_t), callback_UARTTX);
+            }
 
         	spi_rx_buffer[1] = 0x00;
             GPIO_IntEnable(0x0010);
