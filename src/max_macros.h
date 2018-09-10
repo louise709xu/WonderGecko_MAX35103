@@ -2,9 +2,6 @@
  * MAX_macros.h
  *
  * Macros for opcodes used by MAX35103
- *
- * Created on: Jun 29, 2018
- * Author: Louise Xu
  */
 
 #ifndef MAX_MACROS

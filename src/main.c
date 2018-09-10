@@ -5,6 +5,7 @@
 #include "em_cmu.h"
 #include "em_gpio.h"
 #include "em_usart.h"
+#include "rtcdriver.h"
 #include "spidrv.h"
 #include "uartdrv.h"
 #include "gpiointerrupt.h"
@@ -53,7 +54,7 @@ uint8_t spi_rx_buffer[SPI_RX_BUF_LENGTH];
 
 
 /* ----- UART Declarations ----- */
-#define UART_TX_BUF_LENGTH 6
+#define UART_TX_BUF_LENGTH 12
 
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_RX_BUFS, rxBufferQueue);
 DEFINE_BUF_QUEUE(EMDRV_UARTDRV_MAX_CONCURRENT_TX_BUFS, txBufferQueue);
@@ -67,13 +68,23 @@ UARTDRV_Handle_t uart_handle = &uart_handleData;
  * @discussion The measurements and values from the MAX board are stored in the
  *             address locations:
  *             uart_rx_buffer[0] TOF Int
- *             uart_rx_buffer[1] TOF Frac
- *             uart_rx_buffer[2] RTC Month_Year
- *             uart_rx_buffer[3] RTC Day_Date
- *             uart_rx_buffer[4] RTC Min_Hours
- *             uart_rx_buffer[5] RTC Seconds
+ *             uart_rx_buffer[1] Delimiter
+ *             uart_rx_buffer[2] TOF Frac
+ *             uart_rx_buffer[3] Delimiter
+ *             uart_rx_buffer[4] RTC Month_Year
+ *             uart_rx_buffer[5] Delimiter
+ *             uart_rx_buffer[6] RTC Day_Date
+ *             uart_rx_buffer[7] Delimiter
+ *             uart_rx_buffer[8] RTC Min_Hours
+ *             uart_rx_buffer[9] Delimiter
+ *             uart_rx_buffer[10] RTC Seconds
+ *             uart_rx_buffer[11] Delimiter
  ******************************************************************************/
 uint32_t max_reg_buffer[UART_TX_BUF_LENGTH];
+uint32_t delimiter = 0x00000020;
+
+/* ----- RTC Declarations ----- */
+RTCDRV_TimerID_t rtc_id;
 
 
 /*******************************************************************************
@@ -211,7 +222,6 @@ void MAX_Init()
  * @return      void
  ******************************************************************************/
 void SPI_Init() {
-
     SPIDRV_Init_t initData = {                                                        \
               USART1,                       /* USART port                       */    \
               _USART_ROUTE_LOCATION_LOC1,   /* USART pins location number       */    \
@@ -227,7 +237,6 @@ void SPI_Init() {
 
     // Initialize a SPI driver instance
     SPIDRV_Init( spi_handle, &initData );
-
 }
 
 
@@ -259,6 +268,7 @@ void UART_Init() {
 	UARTDRV_InitUart(uart_handle, &uartInitData);
 }
 
+// Function required for non-blocking transmit
 void callback_UARTTX(UARTDRV_Handle_t handle,
                            Ecode_t transferStatus,
                            uint8_t *data,
@@ -270,15 +280,53 @@ void callback_UARTTX(UARTDRV_Handle_t handle,
   (void)transferCount;
 }
 
+// Function required for non-blocking receive
 void callback_UARTRX(UARTDRV_Handle_t handle,
                            Ecode_t transferStatus,
                            uint8_t *data,
                            UARTDRV_Count_t transferCount)
 {
-  (void)handle;
-  (void)transferStatus;
-  (void)data;
-  (void)transferCount;
+    (void)handle;
+    (void)transferStatus;
+    (void)data;
+    (void)transferCount;
+}
+
+
+void callback_RTC( RTCDRV_TimerID_t id, void * user )
+{
+    (void) user; // unused argument
+
+    // TOF Interrupt (bit 12)
+    if((0x10 & spi_rx_buffer[1]) == 0x10) {
+
+        // Read data from MAX board registers
+        pollRTC();
+        pollTOF();
+
+        // Convert data into hex format
+        processRTC();
+        processTOF();
+
+        // Send each register individually
+        // TODO: Include delimiter in uart_TX buffer and send all registers at once
+        //       Potentially will fix bug where last two registers are not properly transmitted
+        UARTDRV_Transmit(uart_handle, max_reg_buffer, sizeof(uint32_t) * UART_TX_BUF_LENGTH, callback_UARTTX);
+        //for(int i = 0; i < UART_TX_BUF_LENGTH; i++) {
+        //    UARTDRV_Transmit(uart_handle, &max_reg_buffer[i], sizeof(uint32_t), callback_UARTTX);
+        //    UARTDRV_Transmit(uart_handle, &delimiter, sizeof(uint8_t), callback_UARTTX);
+        //}
+
+        // Reset interrupt
+        spi_rx_buffer[1] = 0x00;
+        GPIO_IntEnable(0x0010);
+
+        // Make new TOF measurement
+        spi_tx_buffer[0] = TOF_DIFF;
+        MAX_SPI_TX(&spi_tx_buffer[0]);
+
+    }
+
 }
 
 void GPIOINT_callback(void) {
@@ -312,7 +360,6 @@ void setupGPIOInt() {
 }
 
 
-
 void pollRTC() {
 	spi_tx_buffer[0] = READ_RTC_M_Y;
     MAX_SPI_TXRX(&spi_tx_buffer[0] , &spi_rx_buffer[9]);
@@ -336,39 +383,23 @@ void pollTOF() {
 }
 
 void processRTC(){
-	max_reg_buffer[2] = int16_2hex(*((uint16_t*)&spi_rx_buffer[10]));
-	max_reg_buffer[3] = int16_2hex(*((uint16_t*)&spi_rx_buffer[13]));
-	max_reg_buffer[4] = int16_2hex(*((uint16_t*)&spi_rx_buffer[16]));
-	max_reg_buffer[5] = int16_2hex(*((uint16_t*)&spi_rx_buffer[19]));
+    max_reg_buffer[4] = int16_2hex(*((uint16_t*)&spi_rx_buffer[10]));
+    max_reg_buffer[6] = int16_2hex(*((uint16_t*)&spi_rx_buffer[13]));
+    max_reg_buffer[8] = int16_2hex(*((uint16_t*)&spi_rx_buffer[16]));
+    max_reg_buffer[10] = int16_2hex(*((uint16_t*)&spi_rx_buffer[19]));
 }
 
 void processTOF(){
-	max_reg_buffer[0] = int16_2hex(*((uint16_t*)&spi_rx_buffer[4]));
-	max_reg_buffer[1] = int16_2hex(*((uint16_t*)&spi_rx_buffer[7]));
+    max_reg_buffer[0] = int16_2hex(*((uint16_t*)&spi_rx_buffer[4]));
+    max_reg_buffer[2] = int16_2hex(*((uint16_t*)&spi_rx_buffer[7]));
 }
-
-
-
-// For debugging purposes
-void delay(int number_of_seconds)
-{
-    // Converting time into milli_seconds
-    int milli_seconds = 1000 * number_of_seconds;
-
-    // Storing start time
-    clock_t start_time = clock();
-
-    // looping till required time is not achieved
-    while (clock() < start_time + milli_seconds);
-}
-
 
 
 /*******************************************************************************
  * @function    main()
  * @abstract    Set up communication with MAX board, poll for measurements
  * @discussion  Initialize WonderGecko, SPIDRV, UART, MAX board, check interrupt
- *              status, record TOF measurements when available
+ *              status, start RTC Timer
  *
  * @return      void
  ******************************************************************************/
@@ -382,53 +413,23 @@ int main(void) {
     MAX_Init();
     setupGPIOInt();
 
+    // Initialization of RTCDRV driver
+    RTCDRV_Init();
+    // Reserve a timer
+    Ecode_t max_timer = RTCDRV_AllocateTimer( &rtc_id );
+
+    max_reg_buffer[1] = max_reg_buffer[3] = max_reg_buffer[5] = max_reg_buffer[7] = max_reg_buffer[9] = max_reg_buffer[11] = delimiter;
+
+
+    // Initial measurement
     spi_tx_buffer[0] = TOF_DIFF;
     MAX_SPI_TX(&spi_tx_buffer[0]);
 
     spi_tx_buffer[0] = READ_INT_STAT_REG;
     MAX_SPI_TXRX(&spi_tx_buffer[0], &spi_rx_buffer[0]);
 
-    uint8_t delimiter = '\t';
-
-    uint8_t test_buffer[10];
-    test_buffer[0] = 'a';
-    UARTDRV_Transmit(uart_handle, test_buffer, 10, callback_UARTTX);
-
-    int i;
-
-    while (1) {
-
-    	// For debugging purposes
-    	// pollRTC();
-    	// processRTC();
-        // UARTDRV_Transmit(uart_handle, (uint8_t*)&max_reg_buffer, UART_TX_BUF_LENGTH * 4, callback_UARTTX);
-
-        delay(100);
-
-        // TOF Interrupt (bit 12)
-        if((0x10 & spi_rx_buffer[1]) == 0x10) {
-
-        	// Read data from MAX board registers
-        	pollRTC();
-        	pollTOF();
-
-            processRTC();
-            processTOF();
-
-            for(i = 0; i < UART_TX_BUF_LENGTH; i++) {
-            	UARTDRV_Transmit(uart_handle, (uint8_t*)(&max_reg_buffer[i]), sizeof(uint32_t), callback_UARTTX);
-            	UARTDRV_Transmit(uart_handle, &delimiter, sizeof(uint8_t), callback_UARTTX);
-            }
-
-        	spi_rx_buffer[1] = 0x00;
-            GPIO_IntEnable(0x0010);
-
-            spi_tx_buffer[0] = TOF_DIFF;
-            MAX_SPI_TX(&spi_tx_buffer[0]);
-
-        }
-
-    }
+    // Start a periodic timer with 1000 millisecond timeout
+    RTCDRV_StartTimer( rtc_id, rtcdrvTimerTypePeriodic, 1000, callback_RTC, NULL );
 
 }
 
