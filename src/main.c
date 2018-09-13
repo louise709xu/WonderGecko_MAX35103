@@ -79,16 +79,16 @@ UARTDRV_Handle_t uart_handle = &uart_handleData;
      * @abstract Stores information received from the MAX board
      * @discussion The measurements and values from the MAX board are stored in the
      *             address locations:
-     *             uart_rx_buffer[0] TOF Int
-     *             uart_rx_buffer[1] Delimiter
-     *             uart_rx_buffer[2] TOF Frac
-     *             uart_rx_buffer[3] Delimiter
-     *             uart_rx_buffer[4] RTC Month_Year
-     *             uart_rx_buffer[5] Delimiter
-     *             uart_rx_buffer[6] RTC Day_Date
-     *             uart_rx_buffer[7] Delimiter
-     *             uart_rx_buffer[8] RTC Min_Hours
-     *             uart_rx_buffer[9] Delimiter
+     *             uart_rx_buffer[0]  TOF Int
+     *             uart_rx_buffer[1]  Delimiter
+     *             uart_rx_buffer[2]  TOF Frac
+     *             uart_rx_buffer[3]  Delimiter
+     *             uart_rx_buffer[4]  RTC Month_Year
+     *             uart_rx_buffer[5]  Delimiter
+     *             uart_rx_buffer[6]  RTC Day_Date
+     *             uart_rx_buffer[7]  Delimiter
+     *             uart_rx_buffer[8]  RTC Min_Hours
+     *             uart_rx_buffer[9]  Delimiter
      *             uart_rx_buffer[10] RTC Seconds
      *             uart_rx_buffer[11] Delimiter
      ******************************************************************************/
@@ -97,7 +97,7 @@ UARTDRV_Handle_t uart_handle = &uart_handleData;
 
 #else
 
-    #define UART_TX_BUF_LENGTH 39
+    #define UART_TX_BUF_LENGTH 35
     /*******************************************************************************
      * @var uart_tx_buffer
      * @abstract Stores information received from the MAX board
@@ -120,13 +120,13 @@ UARTDRV_Handle_t uart_handle = &uart_handleData;
      *             uart_tx_buffer[14]    ':'
      *             uart_tx_buffer[15]    10 Seconds
      *             uart_tx_buffer[16]    Seconds
-     *             uart_tx_buffer[17]    ':'
+     *             uart_tx_buffer[17]    ':'max
      *             uart_tx_buffer[18]    Tenths of Seconds
      *             uart_tx_buffer[19]    Hundredths of Seconds
      *             uart_tx_buffer[20]    '\t'
-     *             uart_tx_buffer[21:36] TOF Diff
-     *             uart_tx_buffer[37]    '\n'
-     *             uart_tx_buffer[38]    '\r'
+     *             uart_tx_buffer[21:32] TOF Diff
+     *             uart_tx_buffer[33]    '\n'
+     *             uart_tx_buffer[34]    '\r'
      ******************************************************************************/
     uint8_t uart_tx_buffer[UART_TX_BUF_LENGTH];
 #endif
@@ -144,6 +144,9 @@ RTCDRV_TimerID_t rtc_id;
  ******************************************************************************/
 void MAX_Init()
 {
+	spi_tx_buffer[0] = RESET;            // Initialize
+	MAX_SPI_TX(&spi_tx_buffer[0]);
+
     /* ----- Begin configuration register setup ----- */
 
     /***************************************************************************
@@ -486,7 +489,7 @@ void processTOF_ASCII(){
 	tofValue += tofValueFrac;
 
 	gcvt(tofValue, 12, tmp_buffer);
-	sprintf(&uart_tx_buffer[21], "%12s\r\n", tmp_buffer);
+	sprintf(&uart_tx_buffer[21], "%12s\n\r", tmp_buffer);
 }
 
 
